@@ -22,6 +22,9 @@
 //OLED pins - Disabled on the shed so just use rest to turn it off
 #define OLED_RST 16
 
+//Other Pins
+#define BAT_ADC_PIN 13
+
 //Globals
 byte localAdr = ShedRelayAddress; // Easy way to refer to ourself
 LoRaData sentMsg;
@@ -82,11 +85,12 @@ void sendLoRaMsg(LoRaData &msg) {
     LoRa.endPacket();
 
     msg.ID++; //! Should we do this here or at the ack???
+    LoRa.receive();   //Return to listen mode
 }
 ///////////////////////////
 // Functions - Setup
 ///////////////////////////
-void setupOLED() {
+void setUpOLED() {
     //reset OLED display via software
     pinMode(OLED_RST, OUTPUT);
     digitalWrite(OLED_RST, LOW);
@@ -121,6 +125,12 @@ void setUpStructs() {
     initStruct(recvMsg);
     initStruct(sentMsg);
 
+    //Unique settings Here
+    sentMsg.destAdr = BaseStationAddress;
+    sentMsg.senderAdr = localAdr;
+}
+void setUpPins() {
+
 }
 ///////////////////////////
 // Setup/Loop
@@ -130,11 +140,17 @@ void setup() {
     Serial.begin(9600);
     Serial.println("Base Station Starting");
     
-    setupOLED();
+    setUpPins();
+    setUpOLED();
     setUpLoRa();
     setUpStructs();
 }
 
 void loop() {
-
+  float adc = analogRead(BAT_ADC_PIN);
+  float voltage = (adc * 3.52) / (4095.0);  //Custom tune the ref voltage value
+  voltage = voltage / 0.2;
+  sentMsg.message = voltage;
+  sendLoRaMsg(sentMsg);
+  delay(1000);
 }

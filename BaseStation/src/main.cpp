@@ -28,6 +28,9 @@
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
+//Other Pins
+
+
 //Globals
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 byte localAdr = BaseStationAddress; // Easy way to refer to ourself
@@ -72,11 +75,13 @@ void myLoRaReceive(int inPacket, LoRaData &msg) {
 
     //Message must be for this unit
     //TODO
+    Serial.print("Packet In: ");
+    Serial.println(msg.message);
 }
 
 void onLoRaReceive(int pSize) {
-  // Just using this to call our own function
-  myLoRaReceive(pSize, recvMsg);
+    // Just using this to call our own function
+    myLoRaReceive(pSize, recvMsg);
 }
 void sendLoRaMsg(LoRaData &msg) {
     //*Reminder we're using a pointer here.... Spending too long with Python/JS
@@ -89,11 +94,12 @@ void sendLoRaMsg(LoRaData &msg) {
     LoRa.endPacket();
 
     msg.ID++; //! Should we do this here or at the ack???
+    LoRa.receive();   //Return to listen mode
 }
 ///////////////////////////
 // Functions - Setup
 ///////////////////////////
-void setupOLED() {
+void setUpOLED() {
     //reset OLED display via software
     pinMode(OLED_RST, OUTPUT);
     digitalWrite(OLED_RST, LOW);
@@ -149,6 +155,12 @@ void setUpStructs() {
     initStruct(recvMsg);
     initStruct(sentMsg);
 
+    //Unique settings Here
+    sentMsg.destAdr = ShedRelayAddress;
+    sentMsg.senderAdr = localAdr;
+}
+void setUpPins() {
+
 }
 ///////////////////////////
 // Setup/Loop
@@ -158,11 +170,16 @@ void setup() {
     Serial.begin(9600);
     Serial.println("Base Station Starting");
     
-    setupOLED();
+    setUpPins();
+    setUpOLED();
     setUpLoRa();
     setUpStructs();
 }
 
 void loop() {
-
+    //! DELETE THIS - Just for testing
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.print(recvMsg.message);
+    display.display();
 }
