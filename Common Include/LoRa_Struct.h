@@ -1,12 +1,11 @@
-//This is a struct to work with our LoRa data
+//This is a struct to work with our unique LoRa data
 struct LoRaData {
     String message;
     int reciverAdr;
-    byte senderAdr;
+    byte senderAdr;  //! Unused?
     byte ID;
     byte Length;
     byte destAdr;
-    byte count;
     int RSSI;
     float SNR;
 };

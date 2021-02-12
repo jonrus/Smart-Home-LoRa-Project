@@ -83,12 +83,12 @@ void sendLoRaMsg(LoRaData &msg) {
     LoRa.beginPacket();
     LoRa.write(msg.destAdr);
     LoRa.write(localAdr);
-    LoRa.write(msg.count);
+    LoRa.write(msg.ID);
     LoRa.write(msg.message.length());
     LoRa.print(msg.message);
     LoRa.endPacket();
 
-    msg.count++; //! Should we do this here or at the ack???
+    msg.ID++; //! Should we do this here or at the ack???
 }
 ///////////////////////////
 // Functions - Setup
@@ -134,7 +134,22 @@ void setUpLoRa() {
     display.println("LoRa Initializing - OK!");
     display.display();
 }
+void initStruct(LoRaData &l) {
+  l.destAdr = 0x00;
+  l.ID = 0x00;
+  l.Length = 0x00;
+  l.message = "";
+  l.reciverAdr = 0x00;
+  l.RSSI = 0;
+  l.senderAdr = 0x00;
+  l.SNR = 0.00;
+}
+void setUpStructs() {
+    //Put blank/starting data in all the strucs
+    initStruct(recvMsg);
+    initStruct(sentMsg);
 
+}
 ///////////////////////////
 // Setup/Loop
 ///////////////////////////
@@ -145,6 +160,7 @@ void setup() {
     
     setupOLED();
     setUpLoRa();
+    setUpStructs();
 }
 
 void loop() {
