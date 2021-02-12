@@ -7,10 +7,14 @@
 #include <SPI.h>
 #include <LoRa.h>
 
-//OLED
+//OLED Adafruit
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+
+//433mhz
+#include <RH_ASK.h>
+
 
 //LoRa Pins
 #define SCK 5
@@ -29,10 +33,11 @@
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
 //Other Pins
-
+#define ASK_PIN 35  //433 mhz pin
 
 //Globals
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
+RH_ASK driver433(2000, ASK_PIN);
 byte localAdr = BaseStationAddress; // Easy way to refer to ourself
 LoRaData sendMsg;
 LoRaData recvMsg;
@@ -40,6 +45,36 @@ LoRaData recvMsg;
 ///////////////////////////
 // Functions - General
 ///////////////////////////
+void updateOLED() {
+    //* At size 1 22 chars is 1 line with 0 rotation
+    //* At size 1 11 chars is 1 line with 45 rotation
+    //* At size 2 11 chars is 1 line with 0 rotation
+    //* At size 2 5 chars is 1 line with 45 rotation
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setCursor(0,0);
+    display.print("    --= Relay =--");
+    display.setCursor(0,10);
+    display.print("V: ");
+    display.print(recvMsg.battWhole);
+    display.print(".");
+    display.print(recvMsg.battDec);
+    display.setCursor(0,20);
+    display.print("T: ");
+    display.print(recvMsg.tempWhole);
+    display.print(".");
+    display.print(recvMsg.tempDec);
+    display.print("  H: ");
+    display.print(recvMsg.humWhole);
+    display.print(".");
+    display.print(recvMsg.humDec);
+    display.setCursor(0,40);
+    display.print("   --= Filament =--");
+    display.setCursor(0,50);
+    display.print("T: 99.99  H:99.99%");
+    display.display();
+}
 void onLoRaReceive(int inPacket) {
     //Check for packet and return if nothing
     if (inPacket == 0) return;
@@ -81,6 +116,8 @@ void onLoRaReceive(int inPacket) {
     }
 
     //Message must be for this unit
+    updateOLED();
+
     //TODO
     Serial.print("Temp: ");
     Serial.print(recvMsg.tempWhole);
@@ -90,6 +127,15 @@ void onLoRaReceive(int inPacket) {
     Serial.print(recvMsg.battWhole);
     Serial.print(".");
     Serial.println(recvMsg.battDec);
+}
+void read433() {
+    uint8_t buff[12];
+    uint8_t len = sizeof(buff);
+
+    if (driver433.recv(buff, &len)) {
+        Serial.print("433: ");
+        Serial.println((char*)buff);
+    }
 }
 ///////////////////////////
 // Functions - Setup
@@ -103,17 +149,12 @@ void setUpOLED() {
 
     //initialize OLED
     Wire.begin(OLED_SDA, OLED_SCL);
-    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false)) { // Address 0x3C for 128x32
+    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false)) { //0x3c is built in
       Serial.println(F("SSD1306 allocation failed"));
       while(1); // Don't proceed, loop forever
     }
-
-    display.clearDisplay();
-    display.setTextColor(WHITE);
-    display.setTextSize(1);
-    display.setCursor(0,0);
-    display.print("Base Station ");
     display.display();
+    delay(2000); //Allow OLED to start up
 }
 void setUpLoRa() {
     //SPI LoRa pins
@@ -131,9 +172,6 @@ void setUpLoRa() {
     LoRa.receive();
 
     Serial.println("LoRa Initializing - OK!");
-    display.setCursor(0,10);
-    display.println("LoRa Initializing - OK!");
-    display.display();
 }
 void setUpStructs() {
     //Put blank/starting data in all the strucs
@@ -144,7 +182,13 @@ void setUpStructs() {
     sendMsg.destAdr = ShedRelayAddress;
     sendMsg.senderAdr = localAdr;
 }
+void setUp433Radio() {
+    if (!driver433.init()) {
+        Serial.println("Unable to init 433 radio");
+    }
+}
 void setUpPins() {
+    pinMode(ASK_PIN, INPUT);
 }
 ///////////////////////////
 // Setup/Loop
@@ -158,12 +202,11 @@ void setup() {
     setUpOLED();
     setUpLoRa();
     setUpStructs();
+    setUp433Radio();
+
+    updateOLED();
 }
 
 void loop() {
-    //! DELETE THIS - Just for testing
-    display.clearDisplay();
-    display.setCursor(0,0);
-    display.print(recvMsg.message);
-    display.display();
+  read433();
 }
