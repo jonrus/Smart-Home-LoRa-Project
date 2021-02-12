@@ -34,41 +34,42 @@
 //Globals
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 byte localAdr = BaseStationAddress; // Easy way to refer to ourself
-LoRaData sentMsg;
+LoRaData sendMsg;
 LoRaData recvMsg;
 
 ///////////////////////////
 // Functions - General
 ///////////////////////////
-void myLoRaReceive(int inPacket, LoRaData &msg) {
+void onLoRaReceive(int inPacket) {
     //Check for packet and return if nothing
     if (inPacket == 0) return;
     
     //Read data and populate the struct
-    msg.reciverAdr = LoRa.read();   //Int becuase can be -1 if no data
-    msg.senderAdr = LoRa.read();
-    msg.ID = LoRa.read();
-    msg.Length = LoRa.read();
+    recvMsg.reciverAdr = LoRa.read();   //Int becuase can be -1 if no data
+    recvMsg.senderAdr = LoRa.read();
+    recvMsg.ID = LoRa.read();
+    recvMsg.relayState = LoRa.read();
     //TODO Added rest of our custom bytes
-    msg.RSSI = LoRa.rssi();
-    msg.SNR = LoRa.packetSnr();
+    recvMsg.Length = LoRa.read();
+    recvMsg.RSSI = LoRa.rssi();
+    recvMsg.SNR = LoRa.packetSnr();
 
     //Clear out any eariler message
-    msg.message = "";
+    recvMsg.message = "";
 
     //Work over remaining data
     while (LoRa.available()) {
-      msg.message += (char)LoRa.read();
+      recvMsg.message += (char)LoRa.read();
     }
 
     //Make sure our message was as long as it should be
-    if (msg.Length != msg.message.length()) {
+    if (recvMsg.Length != recvMsg.message.length()) {
       //TODO Add broadcast for resend
       return;  // It wasn't so return without acting on data
     }
 
     //Make sure this message was sent for this unit OR all units
-    if (msg.reciverAdr != localAdr && msg.reciverAdr != BroadcastAddress) {
+    if (recvMsg.reciverAdr != localAdr && recvMsg.reciverAdr != BroadcastAddress) {
       //TODO Add error/serial print/or whatever
       return;
     }
@@ -76,24 +77,20 @@ void myLoRaReceive(int inPacket, LoRaData &msg) {
     //Message must be for this unit
     //TODO
     Serial.print("Packet In: ");
-    Serial.println(msg.message);
+    Serial.println(recvMsg.message);
 }
-
-void onLoRaReceive(int pSize) {
-    // Just using this to call our own function
-    myLoRaReceive(pSize, recvMsg);
-}
-void sendLoRaMsg(LoRaData &msg) {
+void sendLoRaMsg() {
     //*Reminder we're using a pointer here.... Spending too long with Python/JS
     LoRa.beginPacket();
-    LoRa.write(msg.destAdr);
+    LoRa.write(sendMsg.destAdr);
     LoRa.write(localAdr);
-    LoRa.write(msg.ID);
-    LoRa.write(msg.message.length());
-    LoRa.print(msg.message);
+    LoRa.write(sendMsg.ID);
+    LoRa.write(sendMsg.relayState);
+    LoRa.write(sendMsg.message.length());
+    LoRa.print(sendMsg.message);
     LoRa.endPacket();
 
-    msg.ID++; //! Should we do this here or at the ack???
+    sendMsg.ID++; //! Should we do this here or at the ack???
     LoRa.receive();   //Return to listen mode
 }
 ///////////////////////////
@@ -141,26 +138,26 @@ void setUpLoRa() {
     display.display();
 }
 void initStruct(LoRaData &l) {
-  l.destAdr = 0x00;
-  l.ID = 0x00;
-  l.Length = 0x00;
-  l.message = "";
-  l.reciverAdr = 0x00;
-  l.RSSI = 0;
-  l.senderAdr = 0x00;
-  l.SNR = 0.00;
+    l.destAdr = 0x00;
+    l.ID = 0x00;
+    l.Length = 0x00;
+    l.message = "";
+    l.reciverAdr = 0x00;
+    l.RSSI = 0;
+    l.senderAdr = 0x00;
+    l.SNR = 0.00;
+    l.relayState = 0x00;  //0x00 = open OR 0xFF closed
 }
 void setUpStructs() {
     //Put blank/starting data in all the strucs
     initStruct(recvMsg);
-    initStruct(sentMsg);
+    initStruct(sendMsg);
 
     //Unique settings Here
-    sentMsg.destAdr = ShedRelayAddress;
-    sentMsg.senderAdr = localAdr;
+    sendMsg.destAdr = ShedRelayAddress;
+    sendMsg.senderAdr = localAdr;
 }
 void setUpPins() {
-
 }
 ///////////////////////////
 // Setup/Loop

@@ -6,6 +6,7 @@ struct LoRaData {
     byte ID;
     byte Length;
     byte destAdr;
+    byte relayState;
     int RSSI;
     float SNR;
 };
