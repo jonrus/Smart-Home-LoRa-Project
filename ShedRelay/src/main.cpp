@@ -10,8 +10,10 @@
 #include <SPI.h>
 #include <LoRa.h>
 
-//OLED
+//BME280
 #include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 
 //LoRa Pins
 #define SCK 5
@@ -25,7 +27,11 @@
 //OLED pins - Disabled on the shed so just use rest to turn it off
 #define OLED_RST 16
 
-//Other Pins
+//BME280 Pins (General I2C)
+#define BME_SDA_PIN 21
+#define BME_SCL_PIN 22
+
+//Relay Pins
 #define BATT_ADC_PIN 13
 #define BATT_RELAY_PIN 12
 
@@ -34,6 +40,8 @@ byte localAdr = ShedRelayAddress; // Easy way to refer to ourself
 LoRaData sendMsg;
 LoRaData recvMsg;
 Ticker voltCheckRelayTicker;
+Ticker sendStatusUpdateTicker;
+Adafruit_BME280 bme;
 
 //Battery Voltage Defines
 #define TurnRelayOnVolts 11.9
@@ -50,6 +58,12 @@ void onLoRaReceive(int inPacket) {
     recvMsg.senderAdr = LoRa.read();
     recvMsg.ID = LoRa.read();
     recvMsg.relayState = LoRa.read();
+    recvMsg.tempWhole = LoRa.read();
+    recvMsg.tempDec = LoRa.read();
+    recvMsg.humWhole = LoRa.read();
+    recvMsg.humDec = LoRa.read();
+    recvMsg.battWhole = LoRa.read();
+    recvMsg.battDec = LoRa.read();
     //TODO Added rest of our custom bytes
     recvMsg.Length = LoRa.read();
     recvMsg.RSSI = LoRa.rssi();
@@ -78,33 +92,55 @@ void onLoRaReceive(int inPacket) {
     //Message must be for this unit
     //TODO
 }
-void sendLoRaMsg() {
+void sendLoRaMsg(LoRaData &msg) {
     //*Reminder we're using a pointer here.... Spending too long with Python/JS
     LoRa.beginPacket();
-    LoRa.write(sendMsg.destAdr);
+    LoRa.write(msg.destAdr);
     LoRa.write(localAdr);
-    LoRa.write(sendMsg.ID);
-    LoRa.write(sendMsg.relayState);
-    LoRa.write(sendMsg.message.length());
-    LoRa.print(sendMsg.message);
+    LoRa.write(msg.ID);
+    LoRa.write(msg.relayState);
+    LoRa.write(msg.tempWhole);
+    LoRa.write(msg.tempDec);
+    LoRa.write(msg.humWhole);
+    LoRa.write(msg.humDec);
+    LoRa.write(msg.battWhole);
+    LoRa.write(msg.battDec);
+    LoRa.write(msg.message.length());
+    LoRa.print(msg.message);
     LoRa.endPacket();
 
-    sendMsg.ID++; //! Should we do this here or at the ack???
+    msg.ID++; //! Should we do this here or at the ack???
     LoRa.receive();   //Return to listen mode
+
+    Serial.println("msg sent");
 }
-void sendRelayMessage(bool relayState) {
-    if (relayState) {
-        //Relay is turning on/closing
-    }
-    else {
-        //Relay is turning off/opening
-    }
+void splitNumOnDec(float inNum, byte &outWhole, byte &outDec) {  //TODO change to have ref to whole/dec values and update those
+    byte wholeNum;
+    byte decNum;
+
+    wholeNum = inNum;
+    decNum = inNum * 10 - wholeNum * 10;
+
+    outWhole = wholeNum;
+    outDec = decNum;
 }
 float readBatteryVoltage() {
     float adc = analogRead(BATT_ADC_PIN);
     float volts = (adc * 3.52) / (4095.0);  //Custom tune the ref voltage value
     volts = volts / 0.2;
     return volts;
+}
+void sendStatusMessage() {
+    //Update needed values before calling sendLoRaMsg()
+    float temp = (bme.readTemperature() * 1.8) + 32;
+    float hum = bme.readHumidity();
+    float batVolts = readBatteryVoltage();
+
+    splitNumOnDec(temp, sendMsg.tempWhole, sendMsg.tempDec);
+    splitNumOnDec(hum, sendMsg.humWhole, sendMsg.humDec);
+    splitNumOnDec(batVolts, sendMsg.battWhole, sendMsg.battDec);
+
+    sendLoRaMsg(sendMsg);
 }
 void checkBatteryVoltage() { //*Called by Ticker
     /*
@@ -121,18 +157,20 @@ void checkBatteryVoltage() { //*Called by Ticker
     if (relayOn) {
         digitalWrite(BATT_RELAY_PIN, LOW);  //*Turn off relay
         relayOn = false;
+        sendMsg.relayState = 0x00;
 
         voltCheckRelayTicker.detach(); //Unsure if I need to detach first but why not
         voltCheckRelayTicker.attach(20, checkBatteryVoltage); //TODO Use 900 for 15 minutes
 
         //Send message
-        sendRelayMessage(false);
+        sendStatusMessage();
     }
     else {
         if (currentBattVoltage <= TurnRelayOnVolts && lastBattVoltage <= TurnRelayOnVolts) {
             // Time to turn the relay on
             digitalWrite(BATT_RELAY_PIN, HIGH);
             relayOn = true;
+            sendMsg.relayState = 0xFF;
             lastBattVoltage = 99.99; //Reset so next loop we have to do the double check again
 
             //Update ticker
@@ -140,7 +178,7 @@ void checkBatteryVoltage() { //*Called by Ticker
             voltCheckRelayTicker.attach(10, checkBatteryVoltage); //TODO use 7200 for 120 minutes
 
             //Send message
-            sendRelayMessage(true);
+            sendStatusMessage();
         }
         else {
             //Need to double check the volts
@@ -171,17 +209,6 @@ void setUpLoRa() {
     LoRa.onReceive(onLoRaReceive);
     LoRa.receive();
 }
-void initStruct(LoRaData &l) {
-    l.destAdr = 0x00;
-    l.ID = 0x00;
-    l.Length = 0x00;
-    l.message = "";
-    l.reciverAdr = 0x00;
-    l.RSSI = 0;
-    l.senderAdr = 0x00;
-    l.SNR = 0.00;
-    l.relayState = 0x00;  //0x00 = open OR 0xFF closed
-}
 void setUpStructs() {
     //Put blank/starting data in all the strucs
     initStruct(recvMsg);
@@ -194,24 +221,35 @@ void setUpStructs() {
 void setUpPins() {
     pinMode(BATT_RELAY_PIN, OUTPUT);
 }
+void setUpBME() {
+    Wire.begin(BME_SDA_PIN, BME_SCL_PIN);
+    while (!bme.begin(0x76, &Wire)) { //My BME sensor has this address
+      Serial.println("Unable to connect to BME");
+      delay(100);
+    }
+}
 ///////////////////////////
 // Setup/Loop
 ///////////////////////////
 void setup() {
     //Set up Serial
     Serial.begin(9600);
-    Serial.println("Base Station Starting");
+    Serial.println("Shed Relay Starting");
     
     setUpPins();
     setUpOLED();
-    setUpLoRa();
+    setUpLoRa();  //*This is blocking
     setUpStructs();
-
+    setUpBME();  //*This is blocking
 
     //Attach Tickers
     voltCheckRelayTicker.attach(10, checkBatteryVoltage);  //TODO Use 900 for 15 minutes
+    sendStatusUpdateTicker.attach(30, sendStatusMessage); //TODO Use 300 for 5 minutes
+
+
+    //Send a status update on first boot
+    sendStatusMessage();
 }
 
 void loop() {
-
 }

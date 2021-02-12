@@ -49,6 +49,12 @@ void onLoRaReceive(int inPacket) {
     recvMsg.senderAdr = LoRa.read();
     recvMsg.ID = LoRa.read();
     recvMsg.relayState = LoRa.read();
+    recvMsg.tempWhole = LoRa.read();
+    recvMsg.tempDec = LoRa.read();
+    recvMsg.humWhole = LoRa.read();
+    recvMsg.humDec = LoRa.read();
+    recvMsg.battWhole = LoRa.read();
+    recvMsg.battDec = LoRa.read();
     //TODO Added rest of our custom bytes
     recvMsg.Length = LoRa.read();
     recvMsg.RSSI = LoRa.rssi();
@@ -76,22 +82,14 @@ void onLoRaReceive(int inPacket) {
 
     //Message must be for this unit
     //TODO
-    Serial.print("Packet In: ");
-    Serial.println(recvMsg.message);
-}
-void sendLoRaMsg() {
-    //*Reminder we're using a pointer here.... Spending too long with Python/JS
-    LoRa.beginPacket();
-    LoRa.write(sendMsg.destAdr);
-    LoRa.write(localAdr);
-    LoRa.write(sendMsg.ID);
-    LoRa.write(sendMsg.relayState);
-    LoRa.write(sendMsg.message.length());
-    LoRa.print(sendMsg.message);
-    LoRa.endPacket();
-
-    sendMsg.ID++; //! Should we do this here or at the ack???
-    LoRa.receive();   //Return to listen mode
+    Serial.print("Temp: ");
+    Serial.print(recvMsg.tempWhole);
+    Serial.print(".");
+    Serial.print(recvMsg.tempDec);
+    Serial.print("\tBatt: ");
+    Serial.print(recvMsg.battWhole);
+    Serial.print(".");
+    Serial.println(recvMsg.battDec);
 }
 ///////////////////////////
 // Functions - Setup
@@ -136,17 +134,6 @@ void setUpLoRa() {
     display.setCursor(0,10);
     display.println("LoRa Initializing - OK!");
     display.display();
-}
-void initStruct(LoRaData &l) {
-    l.destAdr = 0x00;
-    l.ID = 0x00;
-    l.Length = 0x00;
-    l.message = "";
-    l.reciverAdr = 0x00;
-    l.RSSI = 0;
-    l.senderAdr = 0x00;
-    l.SNR = 0.00;
-    l.relayState = 0x00;  //0x00 = open OR 0xFF closed
 }
 void setUpStructs() {
     //Put blank/starting data in all the strucs
