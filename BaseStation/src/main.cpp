@@ -128,8 +128,11 @@ void onLoRaReceive(int inPacket) {
     Serial.print(".");
     Serial.println(recvMsg.battDec);
 }
+String parse433DataString(String data, char sep, int index) {
+
+}
 void read433() {
-    uint8_t buff[12];
+    uint8_t buff[40];
     uint8_t len = sizeof(buff);
 
     if (driver433.recv(buff, &len)) {

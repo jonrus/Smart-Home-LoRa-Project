@@ -114,7 +114,7 @@ void sendLoRaMsg(LoRaData &msg) {
 
     Serial.println("msg sent");
 }
-void splitNumOnDec(float inNum, byte &outWhole, byte &outDec) {  //TODO change to have ref to whole/dec values and update those
+void splitNumOnDec(float inNum, byte &outWhole, byte &outDec) {
     byte wholeNum;
     byte decNum;
 
