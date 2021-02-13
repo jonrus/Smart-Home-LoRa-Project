@@ -2,6 +2,7 @@
 #include "../../Common Include/secerts.h"
 #include "../../Common Include/LoRa_Settings.h"
 #include "../../Common Include/LoRa_Struct.h"
+#include "../../Common Include/NRF24_Struct.h"
 
 //LoRa
 #include <SPI.h>
@@ -12,9 +13,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-//433mhz
-#include <RH_ASK.h>
-
+//NRF24
+#include <RH_NRF24.h>
 
 //LoRa Pins
 #define SCK 5
@@ -33,46 +33,54 @@
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
 //Other Pins
-#define ASK_PIN 35  //433 mhz pin
 
 //Globals
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
-RH_ASK driver433(2000, ASK_PIN);
+RH_NRF24 nrf24(12,13);  //CE = pin 12, CSN = 13
 byte localAdr = BaseStationAddress; // Easy way to refer to ourself
 LoRaData sendMsg;
 LoRaData recvMsg;
+FilamentMonitorDataInNRF24 filamentMonData;
+bool needOLEDUpdate = true;
 
 ///////////////////////////
 // Functions - General
 ///////////////////////////
 void updateOLED() {
+    // if (!needOLEDUpdate) {
+    //     return;
+    // }
+
+    needOLEDUpdate = false;     //Sending update so set false
+
     //* At size 1 22 chars is 1 line with 0 rotation
     //* At size 1 11 chars is 1 line with 45 rotation
     //* At size 2 11 chars is 1 line with 0 rotation
     //* At size 2 5 chars is 1 line with 45 rotation
+    char relayTemp[19];
+    char relayVolt[9];
+    char filamentTemp[19];
+    char filamentTempBuff[6];
+    char filamentHumdBuff[6];
+    dtostrf(filamentMonData.temp, 2, 2, filamentTempBuff);
+    dtostrf(filamentMonData.humd, 2, 2, filamentHumdBuff);
+    snprintf(relayTemp, sizeof(relayTemp), "T: %d.%d  H:%d.%d%%", recvMsg.tempWhole, recvMsg.tempDec, recvMsg.humWhole, recvMsg.humDec);
+    snprintf(relayVolt, sizeof(relayVolt), "V: %d.%d", recvMsg.battWhole, recvMsg.battDec);
+    snprintf(filamentTemp, sizeof(filamentTemp), "T: %s  H:%s%%", filamentTempBuff, filamentHumdBuff);
+
     display.clearDisplay();
     display.setTextColor(WHITE);
     display.setTextSize(1);
     display.setCursor(0,0);
     display.print("    --= Relay =--");
     display.setCursor(0,10);
-    display.print("V: ");
-    display.print(recvMsg.battWhole);
-    display.print(".");
-    display.print(recvMsg.battDec);
+    display.print((char*)relayVolt);
     display.setCursor(0,20);
-    display.print("T: ");
-    display.print(recvMsg.tempWhole);
-    display.print(".");
-    display.print(recvMsg.tempDec);
-    display.print("  H: ");
-    display.print(recvMsg.humWhole);
-    display.print(".");
-    display.print(recvMsg.humDec);
+    display.print((char*)relayTemp);
     display.setCursor(0,40);
     display.print("   --= Filament =--");
     display.setCursor(0,50);
-    display.print("T: 99.99  H:99.99%");
+    display.print((char*)filamentTemp);
     display.display();
 }
 void onLoRaReceive(int inPacket) {
@@ -116,9 +124,9 @@ void onLoRaReceive(int inPacket) {
     }
 
     //Message must be for this unit
-    updateOLED();
-
     //TODO
+    needOLEDUpdate = true;
+
     Serial.print("Temp: ");
     Serial.print(recvMsg.tempWhole);
     Serial.print(".");
@@ -128,17 +136,32 @@ void onLoRaReceive(int inPacket) {
     Serial.print(".");
     Serial.println(recvMsg.battDec);
 }
-String parse433DataString(String data, char sep, int index) {
+void readNRF24Data() {
+    if (nrf24.available()) {
+        //Looks like a message is here
+        uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
+        uint8_t len = sizeof(buf);
+        if (nrf24.recv(buf, &len)) {
+            Serial.print("NRF: ");
+            Serial.println((char*)buf);
 
-}
-void read433() {
-    uint8_t buff[40];
-    uint8_t len = sizeof(buff);
-
-    if (driver433.recv(buff, &len)) {
-        Serial.print("433: ");
-        Serial.println((char*)buff);
+            //Send an ack
+            uint8_t ack[] = "ACK";
+            nrf24.send(ack, sizeof(ack));
+            nrf24.waitPacketSent();
+            Serial.println("NRF ACK");
+        }
     }
+    else {
+        //Serial.println("NRF recv failed");
+    }
+}
+String parse433DataString(String data, char sep, int index) {
+    //! https://www.electroniclinic.com/wireless-joystick-controlled-robot-car-using-arduino-433mhz-rf-and-l298n-motor-driver/
+    //! https://github.com/PaulStoffregen/RadioHead/blob/master/examples/nrf24/nrf24_server/nrf24_server.pde
+    //! http://www.airspayce.com/mikem/arduino/RadioHead/classRH__RF24.html#a2cb53e42f79e769497ae564a8d74230e
+    //! https://lastminuteengineers.com/nrf24l01-arduino-wireless-communication/
+    return String("");
 }
 ///////////////////////////
 // Functions - Setup
@@ -177,21 +200,29 @@ void setUpLoRa() {
     Serial.println("LoRa Initializing - OK!");
 }
 void setUpStructs() {
-    //Put blank/starting data in all the strucs
+    //Put blank/starting data in all the strucs so it looks okay on OLED
     initStruct(recvMsg);
     initStruct(sendMsg);
+    initFilamentMon_Struct(filamentMonData);
 
     //Unique settings Here
     sendMsg.destAdr = ShedRelayAddress;
     sendMsg.senderAdr = localAdr;
 }
-void setUp433Radio() {
-    if (!driver433.init()) {
-        Serial.println("Unable to init 433 radio");
+void setUpNRF24Radio() {
+    if (!nrf24.init()) {
+        Serial.println("NRF24 Init Failed");
+        //TODO Add alert via oled/leds/etc
     }
+    if (!nrf24.setChannel(1)) {
+        Serial.println("NRF24 channel set failed");
+    }
+    if (!nrf24.setRF(RH_NRF24::DataRate250kbps, RH_NRF24::TransmitPower0dBm)) {
+      Serial.println("NRF24 setRF failed");
+    }
+    Serial.println("Exit NRF24 setup");
 }
 void setUpPins() {
-    pinMode(ASK_PIN, INPUT);
 }
 ///////////////////////////
 // Setup/Loop
@@ -204,12 +235,14 @@ void setup() {
     setUpPins();
     setUpOLED();
     setUpLoRa();
+    setUpNRF24Radio();
     setUpStructs();
-    setUp433Radio();
 
     updateOLED();
 }
 
 void loop() {
-  read433();
+    readNRF24Data();
+    updateOLED();
+    yield();
 }

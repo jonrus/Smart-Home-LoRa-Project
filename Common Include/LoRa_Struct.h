@@ -2,17 +2,17 @@
 struct LoRaData {
     String message;
     int reciverAdr;
-    byte senderAdr;  //! Unused?
-    byte ID;
-    byte Length;
-    byte destAdr;
-    byte relayState; //* 0x00 = open OR 0xFF closed
-    byte tempWhole;
-    byte tempDec;
-    byte humWhole;
-    byte humDec;
-    byte battWhole;
-    byte battDec;
+    uint8_t senderAdr;  //! Unused?
+    uint8_t ID;
+    uint8_t Length;
+    uint8_t destAdr;
+    uint8_t relayState; //* 0x00 = open OR 0xFF closed
+    uint8_t tempWhole;
+    uint8_t tempDec;
+    uint8_t humWhole;
+    uint8_t humDec;
+    uint8_t battWhole;
+    uint8_t battDec;
     int RSSI;
     float SNR;
 };
