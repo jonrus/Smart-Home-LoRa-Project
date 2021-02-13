@@ -16,6 +16,9 @@
 //NRF24
 #include <RH_NRF24.h>
 
+//Ticker
+#include <Ticker.h>
+
 //LoRa Pins
 #define SCK 5
 #define MISO 19
@@ -36,27 +39,51 @@
 
 //Globals
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
-RH_NRF24 nrf24(12,13);  //CE = pin 12, CSN = 13
+RH_NRF24 nrf24(12,22);  //CE = pin 12, CSN = 13
 byte localAdr = BaseStationAddress; // Easy way to refer to ourself
 LoRaData sendMsg;
 LoRaData recvMsg;
 FilamentMonitorDataInNRF24 filamentMonData;
+Ticker sleepOLEDTicker;
 bool needOLEDUpdate = true;
-
+bool blankOLED = false;
+const int touchThreshold = 60;
 ///////////////////////////
 // Functions - General
 ///////////////////////////
+void updateLEDPins() {
+    if (needOLEDUpdate) {
+        if (recvMsg.relayState == 0xFF) {
+            digitalWrite(17, HIGH);
+        }
+        else {
+            digitalWrite(17, LOW);
+        }
+    }
+}
 void updateOLED() {
-    // if (!needOLEDUpdate) {
-    //     return;
-    // }
-
-    needOLEDUpdate = false;     //Sending update so set false
-
     //* At size 1 22 chars is 1 line with 0 rotation
     //* At size 1 11 chars is 1 line with 45 rotation
     //* At size 2 11 chars is 1 line with 0 rotation
     //* At size 2 5 chars is 1 line with 45 rotation
+    if (blankOLED) {
+        delay(100);     //Need delay? or we crash :(
+        //Seems dumb to do this, as it's writing nothing over and over
+        //But no pixels are active and my device does not seem to support
+        //display.ssd1306_command(SSD1306_DISPLAYOFF);
+        //So this is where we're at...
+        display.clearDisplay();
+        display.display();
+        return;
+    }
+    if (!needOLEDUpdate) {
+        delay(100);     //Need delay? or we crash :(
+        return;
+    }
+    
+    needOLEDUpdate = false;
+    
+    //Build the text for the display
     char relayTemp[19];
     char relayVolt[9];
     char filamentTemp[19];
@@ -68,6 +95,7 @@ void updateOLED() {
     snprintf(relayVolt, sizeof(relayVolt), "V: %d.%d", recvMsg.battWhole, recvMsg.battDec);
     snprintf(filamentTemp, sizeof(filamentTemp), "T: %s  H:%s%%", filamentTempBuff, filamentHumdBuff);
 
+    // Write everything to the display
     display.clearDisplay();
     display.setTextColor(WHITE);
     display.setTextSize(1);
@@ -125,16 +153,7 @@ void onLoRaReceive(int inPacket) {
 
     //Message must be for this unit
     //TODO
-    needOLEDUpdate = true;
-
-    Serial.print("Temp: ");
-    Serial.print(recvMsg.tempWhole);
-    Serial.print(".");
-    Serial.print(recvMsg.tempDec);
-    Serial.print("\tBatt: ");
-    Serial.print(recvMsg.battWhole);
-    Serial.print(".");
-    Serial.println(recvMsg.battDec);
+    needOLEDUpdate = true;  //Update the OLED next loop
 }
 void readNRF24Data() {
     if (nrf24.available()) {
@@ -161,20 +180,32 @@ void readNRF24Data() {
             }
             filamentMonData.temp = atof(strings[0]);
             filamentMonData.humd = atof(strings[1]);
-            Serial.print("T: ");
-            Serial.println(filamentMonData.temp);
-            Serial.print("H: ");
-            Serial.println(filamentMonData.humd);
+
+            needOLEDUpdate = true;  //Update the OLED next loop
         }
     }
     else {
         //Serial.println("NRF recv failed");
     }
 }
-//! https://www.electroniclinic.com/wireless-joystick-controlled-robot-car-using-arduino-433mhz-rf-and-l298n-motor-driver/
-//! https://github.com/PaulStoffregen/RadioHead/blob/master/examples/nrf24/nrf24_server/nrf24_server.pde
-//! http://www.airspayce.com/mikem/arduino/RadioHead/classRH__RF24.html#a2cb53e42f79e769497ae564a8d74230e
-//! https://lastminuteengineers.com/nrf24l01-arduino-wireless-communication/
+void sleepOLEDScreen() {
+    blankOLED = true;
+    sleepOLEDTicker.detach();
+}
+void touchWakeScreen() {
+    static unsigned long last_interrupt_time = 0;
+    unsigned long interrupt_time = millis();
+    // If interrupts come faster than Xms, assume it's a bounce and ignore
+    //Using a long debound time because we don't want to reattach the same ticker over and over
+    if (interrupt_time - last_interrupt_time > 5000)
+    {
+        if (blankOLED) {  // Prevent from attaching when already attached
+            blankOLED = false;
+            sleepOLEDTicker.attach(5, sleepOLEDScreen);
+        }
+    }
+    last_interrupt_time = interrupt_time;
+}
 ///////////////////////////
 // Functions - Setup
 ///////////////////////////
@@ -235,6 +266,7 @@ void setUpNRF24Radio() {
     Serial.println("Exit NRF24 setup");
 }
 void setUpPins() {
+    pinMode(17, OUTPUT);
 }
 ///////////////////////////
 // Setup/Loop
@@ -251,10 +283,17 @@ void setup() {
     setUpStructs();
 
     updateOLED();
+
+    //Attach Tickers
+    sleepOLEDTicker.attach(5, sleepOLEDScreen);
+
+    //Attach touch Interrupt
+    touchAttachInterrupt(13, touchWakeScreen, touchThreshold);
 }
 
 void loop() {
     readNRF24Data();
+    updateLEDPins(); //Needs to be called before updateOLED()
     updateOLED();
-    yield();
+    // yield();
 }
