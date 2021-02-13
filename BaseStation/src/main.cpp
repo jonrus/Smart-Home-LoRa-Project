@@ -142,27 +142,39 @@ void readNRF24Data() {
         uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
         uint8_t len = sizeof(buf);
         if (nrf24.recv(buf, &len)) {
-            Serial.print("NRF: ");
-            Serial.println((char*)buf);
-
             //Send an ack
             uint8_t ack[] = "ACK";
             nrf24.send(ack, sizeof(ack));
             nrf24.waitPacketSent();
-            Serial.println("NRF ACK");
+
+            //Do all this here and not another function because we only need it done here. At the moment....
+            //Work over the data by spliting it and then converting to float
+            char *strings[10];
+            char *ptr = NULL;
+
+            uint8_t index = 0;
+            ptr = strtok((char*)buf, ":|");     //Requires a list of spliters, but we're only really using |
+            while (ptr != NULL) {
+                strings[index] = ptr;
+                index++;
+                ptr = strtok(NULL, ":|");
+            }
+            filamentMonData.temp = atof(strings[0]);
+            filamentMonData.humd = atof(strings[1]);
+            Serial.print("T: ");
+            Serial.println(filamentMonData.temp);
+            Serial.print("H: ");
+            Serial.println(filamentMonData.humd);
         }
     }
     else {
         //Serial.println("NRF recv failed");
     }
 }
-String parse433DataString(String data, char sep, int index) {
-    //! https://www.electroniclinic.com/wireless-joystick-controlled-robot-car-using-arduino-433mhz-rf-and-l298n-motor-driver/
-    //! https://github.com/PaulStoffregen/RadioHead/blob/master/examples/nrf24/nrf24_server/nrf24_server.pde
-    //! http://www.airspayce.com/mikem/arduino/RadioHead/classRH__RF24.html#a2cb53e42f79e769497ae564a8d74230e
-    //! https://lastminuteengineers.com/nrf24l01-arduino-wireless-communication/
-    return String("");
-}
+//! https://www.electroniclinic.com/wireless-joystick-controlled-robot-car-using-arduino-433mhz-rf-and-l298n-motor-driver/
+//! https://github.com/PaulStoffregen/RadioHead/blob/master/examples/nrf24/nrf24_server/nrf24_server.pde
+//! http://www.airspayce.com/mikem/arduino/RadioHead/classRH__RF24.html#a2cb53e42f79e769497ae564a8d74230e
+//! https://lastminuteengineers.com/nrf24l01-arduino-wireless-communication/
 ///////////////////////////
 // Functions - Setup
 ///////////////////////////
