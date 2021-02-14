@@ -47,6 +47,7 @@ FilamentMonitorDataInNRF24 filamentMonData;
 Ticker sleepOLEDTicker;
 bool needOLEDUpdate = true;
 bool blankOLED = false;
+bool wakeUpOLED = false;
 const int touchThreshold = 60;
 ///////////////////////////
 // Functions - General
@@ -192,7 +193,8 @@ void sleepOLEDScreen() {
     blankOLED = true;
     sleepOLEDTicker.detach();
 }
-void touchWakeScreen() {
+void checkTouchWakeScreenLoop() {
+   if (wakeUpOLED) {
     static unsigned long last_interrupt_time = 0;
     unsigned long interrupt_time = millis();
     // If interrupts come faster than Xms, assume it's a bounce and ignore
@@ -201,10 +203,17 @@ void touchWakeScreen() {
     {
         if (blankOLED) {  // Prevent from attaching when already attached
             blankOLED = false;
+            needOLEDUpdate = true;  //Need or the screen wont update until the next message in
             sleepOLEDTicker.attach(5, sleepOLEDScreen);
         }
     }
     last_interrupt_time = interrupt_time;
+   }
+   wakeUpOLED = false;
+}
+void touchWakeScreen() {  //Called via interrupt
+    //Keep it short, and check if we need to do the work in the loop
+    wakeUpOLED = true;
 }
 ///////////////////////////
 // Functions - Setup
@@ -294,6 +303,7 @@ void setup() {
 void loop() {
     readNRF24Data();
     updateLEDPins(); //Needs to be called before updateOLED()
+    checkTouchWakeScreenLoop();
     updateOLED();
     // yield();
 }

@@ -112,6 +112,9 @@ void setUpBME() {
         Serial.println("Could not find a valid BME280 sensor, check wiring!");
         goToSleep();    //Goto sleep and hope things work out better next time
     }
+    //refer to below for info
+    //https://github.com/adafruit/Adafruit_BME280_Library/blob/master/examples/advancedsettings/advancedsettings.ino
+    //http://adafruit.github.io/Adafruit_BME280_Library/html/class_adafruit___b_m_e280.html
     bme.setSampling(Adafruit_BME280::MODE_FORCED,
                     Adafruit_BME280::SAMPLING_X2,   //Temperature
                     Adafruit_BME280::SAMPLING_NONE, //Pressure - Not used in this project
