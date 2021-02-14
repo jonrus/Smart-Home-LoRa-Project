@@ -82,10 +82,9 @@ void setUpRTC () {
     // set the RTC time and date to the compile time
     RTC.set(compileTime());
     setSyncProvider(RTC.get);   // the function to get the time from the RTC
-    if(timeStatus() != timeSet)
+    if(timeStatus() != timeSet) {
         Serial.println("Unable to sync with the RTC");
-    else
-        Serial.println("RTC has set the system time");
+    }
 
     // set Alarm 1 to occur at 5 seconds after every minute
     RTC.setAlarm(ALM1_MATCH_SECONDS, 5, 0, 0, 1);   //TODO Alarm at 15 after every hour
@@ -107,7 +106,6 @@ void setUpRadio() {
     if (!nrf24.setRF(RH_NRF24::DataRate250kbps, RH_NRF24::TransmitPower0dBm)) {
         Serial.println("Radio setRF failed");
     }
-    Serial.println("Exit Radio Setup");
 }
 void setUpBME() {
     if (!bme.begin(BME_ADDR)) {  
@@ -135,14 +133,8 @@ void readBatteryVoltage() {
 void readBME() {
     //Have to force the measurement due to our settings
     bme.takeForcedMeasurement();
-    temp = (bme.readTemperature() * 1.8) + 32;
+    temp = (bme.readTemperature() * 1.8) + 32;  //Convert from C to F
     humd = bme.readHumidity();
-
-    //! Remove below before deployment
-    Serial.print("T:");
-    Serial.print(temp);
-    Serial.print("\tH:");
-    Serial.println(humd);
 }
 void sleepBME(int addr) {
     //Should reduce power draw
@@ -154,13 +146,15 @@ void sleepBME(int addr) {
 }
 void sendNRF24Data() {
     // Create a string with our values and a | as the separator
-    String message = String(temp, 2) + "|" + String(humd, 2);
+    String message = String(temp, 2) + "|" + String(humd, 2) + "|" + String(batt, 2);
     unsigned int messageLen = message.length();
     char messageBuffer[40];
     message.toCharArray(messageBuffer, 40);
 
     nrf24.send((uint8_t *)messageBuffer, messageLen);
     nrf24.waitPacketSent();
+
+    Serial.println(message);
 
     if (nrf24.waitAvailableTimeout(500)) {
         //Should get an ack from the server
@@ -192,11 +186,11 @@ void loop()
 {   
     delay(2000);    //Give time for the BME to warm up
     readBME();
+    readBatteryVoltage();
     delay(500);
     sendNRF24Data();
     sleepBME(BME_ADDR);
-    readBatteryVoltage();
-    Serial.println(batt);
+
     //Everything is done, go to sleep
     goToSleep();
 }
