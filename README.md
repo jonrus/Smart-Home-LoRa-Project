@@ -44,7 +44,7 @@ This project will be unique, to my home and situation. Not much will apply to ot
         - ~~Air Pressure (?)~~
       - Battery Voltage (of self)
     - Reports to Base Station
-    - ~~via 433 mhz~~
+      - ~~via 433 mhz~~
       - via 2.4 Ghz (NRF24L01)
   
   
