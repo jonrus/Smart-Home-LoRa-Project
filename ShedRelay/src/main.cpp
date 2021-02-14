@@ -127,7 +127,7 @@ void splitNumOnDec(float inNum, byte &outWhole, byte &outDec) {
 float readBatteryVoltage() {
     float adc = analogRead(BATT_ADC_PIN);
     float volts = (adc * 3.52) / (4095.0);  //Custom tune the ref voltage value
-    volts = volts / 0.2;
+    volts = volts / 0.2;  //0.2 is the the result of  (R2/(R1+R2)) of our voltage divider
     return volts;
 }
 void sendStatusMessage() {

@@ -17,12 +17,14 @@
 
 //Pins
 #define WAKE_PIN 2 //Pin the RTC to interrupt to wake the device
+#define BATT_ADC_PIN A0
 
 // Globals
 RH_NRF24 nrf24(9,10);
 Adafruit_BME280 bme;
 float humd;
 float temp;
+float batt;
 ///////////////////////////
 // Functions - General
 ///////////////////////////
@@ -125,6 +127,11 @@ void setUpBME() {
 void setUpPins() {
     pinMode(WAKE_PIN, INPUT_PULLUP);
 }
+void readBatteryVoltage() {
+    float adc = analogRead(BATT_ADC_PIN);
+    float volts = (adc * 3.3) / (1024.0);  //Custom tune the ref voltage here
+    batt = volts / 0.2;  //0.2 is the the result of  (R2/(R1+R2)) of our voltage divider
+}
 void readBME() {
     //Have to force the measurement due to our settings
     bme.takeForcedMeasurement();
@@ -188,7 +195,8 @@ void loop()
     delay(500);
     sendNRF24Data();
     sleepBME(BME_ADDR);
-
+    readBatteryVoltage();
+    Serial.println(batt);
     //Everything is done, go to sleep
     goToSleep();
 }
