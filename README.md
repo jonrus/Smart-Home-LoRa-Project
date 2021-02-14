@@ -23,10 +23,10 @@ This project will be unique, to my home and situation. Not much will apply to ot
     - Monitors
       - Solar Panel output
       - Battery Voltage
-      - Environment
+      - Environment (BME280)
         - Temperature
         - Humidity
-        - Air Pressure
+        - Air Pressure - (Not currently reported to base station)
     - Controls Relay based on Battery voltage
       - Battery powers
         - Shed lighting
@@ -38,11 +38,13 @@ This project will be unique, to my home and situation. Not much will apply to ot
 
   - Arduino Pro Mini (3.3v)
     - Monitors
-      - Environment
+      - Environment (BME280)
         - Temp
         - Humidity
-        - Air Pressure (?)
+        - ~~Air Pressure (?)~~
       - Battery Voltage (of self)
-    - Reports (via 433 MHz) to Base Station
-
+    - Reports to Base Station
+    - ~~via 433 mhz~~
+      - via 2.4 Ghz (NRF24L01)
+  
   
