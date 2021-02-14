@@ -28,18 +28,25 @@
 #define DIO0 26   // Chip Irq
 #define BAND 915E6//915E6 for North America
 
-//OLED pins
+//OLED Pins
 #define OLED_SDA 4
 #define OLED_SCL 15 
 #define OLED_RST 16
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
+//NRF24 Pins
+#define NRF_CE_PIN 12
+#define NRF_CSN_PIN 22
+
 //Other Pins
+#define TOUCH_IN_PIN 13
 #define SHED_LED_PIN 17
+#define FILAMENT_LED_PIN 23 //Also the built in LED but oh well - running out of pins
+
 //Globals
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
-RH_NRF24 nrf24(12,22);  //CE = pin 12, CSN = 22
+RH_NRF24 nrf24(NRF_CE_PIN, NRF_CSN_PIN);  //CE = pin 12, CSN = 22
 byte localAdr = BaseStationAddress; // Easy way to refer to ourself
 LoRaData sendMsg;
 LoRaData recvMsg;
@@ -48,25 +55,40 @@ Ticker sleepOLEDTicker;
 bool needOLEDUpdate = true;
 bool blankOLED = false;
 bool wakeUpOLED = false;
-const int touchThreshold = 60;
+const int touchThreshold = 70;
 ///////////////////////////
 // Functions - General
 ///////////////////////////
 void updateLEDPins() {
+    if (!needOLEDUpdate) {
+        return;
+    }
+
     if (needOLEDUpdate) {
+        //Shed LED
         if (recvMsg.relayState == 0xFF) {
             digitalWrite(SHED_LED_PIN, HIGH);
         }
         else {
             digitalWrite(SHED_LED_PIN, LOW);
         }
+
+        //Filament Monitor LED
+        if (filamentMonData.batt < 3.2) {  //Change this to match your battery cutoff voltage
+            digitalWrite(FILAMENT_LED_PIN, HIGH);
+        }
+        else {
+            digitalWrite(FILAMENT_LED_PIN, LOW);
+        }
     }
 }
 void updateOLED() {
     //* At size 1 22 chars is 1 line with 0 rotation
-    //* At size 1 11 chars is 1 line with 45 rotation
     //* At size 2 11 chars is 1 line with 0 rotation
-    //* At size 2 5 chars is 1 line with 45 rotation
+    if (!needOLEDUpdate) {
+        delay(100);     //Need delay? or we crash :(
+        return;
+    }
     if (blankOLED) {
         delay(100);     //Need delay? or we crash :(
         //Seems dumb to do this, as it's writing nothing over and over
@@ -75,10 +97,7 @@ void updateOLED() {
         //So this is where we're at...
         display.clearDisplay();
         display.display();
-        return;
-    }
-    if (!needOLEDUpdate) {
-        delay(100);     //Need delay? or we crash :(
+        needOLEDUpdate = false;  //Prevent other functions that check this from firing over and over
         return;
     }
     
@@ -106,10 +125,13 @@ void updateOLED() {
     display.print((char*)relayVolt);
     display.setCursor(0,20);
     display.print((char*)relayTemp);
-    display.setCursor(0,40);
+    display.setCursor(0,35);
     display.print("   --= Filament =--");
-    display.setCursor(0,50);
+    display.setCursor(0,45);
     display.print((char*)filamentTemp);
+    display.setCursor(0,55);
+    display.print("V: ");
+    display.print(filamentMonData.batt);
     display.display();
 }
 void onLoRaReceive(int inPacket) {
@@ -142,18 +164,16 @@ void onLoRaReceive(int inPacket) {
 
     //Make sure our message was as long as it should be
     if (recvMsg.Length != recvMsg.message.length()) {
-      //TODO Add broadcast for resend
+      //TODO Add broadcast for resend?
       return;  // It wasn't so return without acting on data
     }
 
     //Make sure this message was sent for this unit OR all units
     if (recvMsg.reciverAdr != localAdr && recvMsg.reciverAdr != BroadcastAddress) {
-      //TODO Add error/serial print/or whatever
       return;
     }
 
     //Message must be for this unit
-    //TODO
     needOLEDUpdate = true;  //Update the OLED next loop
 }
 void readNRF24Data() {
@@ -181,7 +201,8 @@ void readNRF24Data() {
             }
             filamentMonData.temp = atof(strings[0]);
             filamentMonData.humd = atof(strings[1]);
-
+            filamentMonData.batt = atof(strings[2]);
+            
             needOLEDUpdate = true;  //Update the OLED next loop
         }
     }
@@ -191,6 +212,7 @@ void readNRF24Data() {
 }
 void sleepOLEDScreen() {
     blankOLED = true;
+    needOLEDUpdate = true;
     sleepOLEDTicker.detach();
 }
 void checkTouchWakeScreenLoop() {
@@ -276,6 +298,7 @@ void setUpNRF24Radio() {
 }
 void setUpPins() {
     pinMode(SHED_LED_PIN, OUTPUT);
+    pinMode(FILAMENT_LED_PIN, OUTPUT);
 }
 ///////////////////////////
 // Setup/Loop
@@ -297,13 +320,13 @@ void setup() {
     sleepOLEDTicker.attach(5, sleepOLEDScreen);
 
     //Attach touch Interrupt
-    touchAttachInterrupt(13, touchWakeScreen, touchThreshold);
+    touchAttachInterrupt(TOUCH_IN_PIN, touchWakeScreen, touchThreshold);
 }
 
 void loop() {
     readNRF24Data();
     updateLEDPins(); //Needs to be called before updateOLED()
-    checkTouchWakeScreenLoop();
+    checkTouchWakeScreenLoop(); //Needs to be called before updateOLED()
     updateOLED();
     // yield();
 }
