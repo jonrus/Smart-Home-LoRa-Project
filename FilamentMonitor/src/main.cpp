@@ -7,6 +7,16 @@
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
+#define BME_ADDR 0x76
+
+//Real Time Clock
+#include <DS3232RTC.h>
+
+//AVR/Sleep
+#include <avr/sleep.h>
+
+//Pins
+#define WAKE_PIN 2 //Pin the RTC to interrupt to wake the device
 
 // Globals
 RH_NRF24 nrf24(9,10);
@@ -16,10 +26,78 @@ float temp;
 ///////////////////////////
 // Functions - General
 ///////////////////////////
+void wakeUp() {
+    //short and sweet
+    sleep_disable();
+    detachInterrupt(0);
+}
+void goToSleep() {
+    sleep_enable();
+    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+    attachInterrupt(digitalPinToInterrupt(WAKE_PIN), wakeUp, LOW); //0 is interrupt on pin "2"
+    delay(200);
+    sleep_cpu();
+
+    //* Code resumes here after wake up
+
+    //Clear alarms
+    RTC.alarm(ALARM_1);
+    RTC.alarm(ALARM_2);
+}
+time_t compileTime() {
+    // function to return the compile date and time as a time_t value
+    //Direct from lib examples
+    const time_t FUDGE(10);    //fudge factor to allow for upload time, etc. (seconds, YMMV)
+    const char *compDate = __DATE__, *compTime = __TIME__, *months = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    char compMon[4], *m;
+
+    strncpy(compMon, compDate, 3);
+    compMon[3] = '\0';
+    m = strstr(months, compMon);
+
+    tmElements_t tm;
+    tm.Month = ((m - months) / 3 + 1);
+    tm.Day = atoi(compDate + 4);
+    tm.Year = atoi(compDate + 7) - 1970;
+    tm.Hour = atoi(compTime);
+    tm.Minute = atoi(compTime + 3);
+    tm.Second = atoi(compTime + 6);
+
+    time_t t = makeTime(tm);
+    return t + FUDGE;        //add fudge factor to allow for compile time
+}
+void setUpRTC () {
+    RTC.begin();
+    // initialize the alarms to known values, clear the alarm flags, clear the alarm interrupt flags
+    RTC.setAlarm(ALM1_MATCH_DATE, 0, 0, 0, 1);
+    RTC.setAlarm(ALM2_MATCH_DATE, 0, 0, 0, 1);
+    RTC.alarm(ALARM_1);
+    RTC.alarm(ALARM_2);
+    RTC.alarmInterrupt(ALARM_1, false);
+    RTC.alarmInterrupt(ALARM_2, false);
+    RTC.squareWave(SQWAVE_NONE);
+
+    // set the RTC time and date to the compile time
+    RTC.set(compileTime());
+    setSyncProvider(RTC.get);   // the function to get the time from the RTC
+    if(timeStatus() != timeSet)
+        Serial.println("Unable to sync with the RTC");
+    else
+        Serial.println("RTC has set the system time");
+
+    // set Alarm 1 to occur at 5 seconds after every minute
+    RTC.setAlarm(ALM1_MATCH_SECONDS, 5, 0, 0, 1);   //TODO Alarm at 15 after every hour
+    RTC.setAlarm(ALM2_MATCH_HOURS, 45, 0, 0);       //Alarm at 45 after every hour
+    // clear the alarm flag
+    RTC.alarm(ALARM_1);
+    RTC.alarm(ALARM_2);
+    // set Alarm to interrupt
+    RTC.alarmInterrupt(ALARM_1, true);
+}
 void setUpRadio() {
     if (!nrf24.init()) {
         Serial.println("Radio init failed");
-        //TODO ADD go to sleep/etc
+        goToSleep();    //Goto sleep and hope things work out better next time
     }
     if (!nrf24.setChannel(1)) {
         Serial.println("Radio channel set failed");
@@ -30,18 +108,41 @@ void setUpRadio() {
     Serial.println("Exit Radio Setup");
 }
 void setUpBME() {
-    if (!bme.begin(0x76)) {  
-      Serial.println("Could not find a valid BME280 sensor, check wiring!");
-      while (1);
+    if (!bme.begin(BME_ADDR)) {  
+        Serial.println("Could not find a valid BME280 sensor, check wiring!");
+        goToSleep();    //Goto sleep and hope things work out better next time
     }
+    bme.setSampling(Adafruit_BME280::MODE_FORCED,
+                    Adafruit_BME280::SAMPLING_X2,   //Temperature
+                    Adafruit_BME280::SAMPLING_NONE, //Pressure - Not used in this project
+                    Adafruit_BME280::SAMPLING_X2,   //Humidity
+                    Adafruit_BME280::FILTER_X2);
+
+}
+void setUpPins() {
+    pinMode(WAKE_PIN, INPUT_PULLUP);
 }
 void readBME() {
+    //Have to force the measurement due to our settings
+    bme.takeForcedMeasurement();
     temp = (bme.readTemperature() * 1.8) + 32;
     humd = bme.readHumidity();
+
+    //! Remove below before deployment
+    Serial.print("T:");
+    Serial.print(temp);
+    Serial.print("\tH:");
+    Serial.println(humd);
+}
+void sleepBME(int addr) {
+    //Should reduce power draw
+    //Info from: https://www.youtube.com/watch?v=O8FgrHR2laM
+    Wire.beginTransmission(addr);
+    Wire.write((uint8_t)0xF4);
+    Wire.write((uint8_t)0b00000000);
+    Wire.endTransmission();
 }
 void sendNRF24Data() {
-    readBME();
-
     // Create a string with our values and a | as the separator
     String message = String(temp, 2) + "|" + String(humd, 2);
     unsigned int messageLen = message.length();
@@ -58,7 +159,6 @@ void sendNRF24Data() {
 
         if (nrf24.recv(resBuf, &resLen)) {
             Serial.println("Got a reply");
-            //TODO goto sleep/etc
         }
         else {
             Serial.println("send/recv failed");
@@ -66,21 +166,7 @@ void sendNRF24Data() {
     }
     else {
         Serial.println("No reply from Base Station");
-        //TODO goto sleep/etc
     }
-}
-void send433Data() {
-    readBME();  //Update temp/humd values
-
-    // Create a string with our values and a | as the separator
-    String message = String(temp, 2) + "|" + String(humd, 2);
-    unsigned int messageLen = message.length();
-    char messageBuffer[40];
-    message.toCharArray(messageBuffer, 40);
-
-    //433 Driver
-    // driver.send((uint8_t *)messageBuffer, messageLen);
-    // driver.waitPacketSent();
 }
 
 // Loop
@@ -88,11 +174,18 @@ void setup()
 {
     Serial.begin(9600);
     Serial.println("$");
+    setUpRTC();
     setUpBME();
     setUpRadio();
 }
 void loop()
-{
+{   
+    delay(2000);    //Give time for the BME to warm up
+    readBME();
+    delay(500);
     sendNRF24Data();
-    delay(1000);
+    sleepBME(BME_ADDR);
+
+    //Everything is done, go to sleep
+    goToSleep();
 }

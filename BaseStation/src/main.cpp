@@ -36,10 +36,10 @@
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
 //Other Pins
-
+#define SHED_LED_PIN 17
 //Globals
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
-RH_NRF24 nrf24(12,22);  //CE = pin 12, CSN = 13
+RH_NRF24 nrf24(12,22);  //CE = pin 12, CSN = 22
 byte localAdr = BaseStationAddress; // Easy way to refer to ourself
 LoRaData sendMsg;
 LoRaData recvMsg;
@@ -54,10 +54,10 @@ const int touchThreshold = 60;
 void updateLEDPins() {
     if (needOLEDUpdate) {
         if (recvMsg.relayState == 0xFF) {
-            digitalWrite(17, HIGH);
+            digitalWrite(SHED_LED_PIN, HIGH);
         }
         else {
-            digitalWrite(17, LOW);
+            digitalWrite(SHED_LED_PIN, LOW);
         }
     }
 }
@@ -266,7 +266,7 @@ void setUpNRF24Radio() {
     Serial.println("Exit NRF24 setup");
 }
 void setUpPins() {
-    pinMode(17, OUTPUT);
+    pinMode(SHED_LED_PIN, OUTPUT);
 }
 ///////////////////////////
 // Setup/Loop
