@@ -12,7 +12,7 @@
 //Real Time Clock
 #include <DS3232RTC.h>
 
-//AVR/Sleep
+//AVR
 #include <avr/sleep.h>
 
 //Pins
@@ -34,6 +34,10 @@ void wakeUp() {
     detachInterrupt(0);
 }
 void goToSleep() {
+    //Try to save some power
+    nrf24.sleep(); //Put radio to sleep
+
+    //Put the MCU to sleep
     sleep_enable();
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
     attachInterrupt(digitalPinToInterrupt(WAKE_PIN), wakeUp, LOW); //0 is interrupt on pin "2"
