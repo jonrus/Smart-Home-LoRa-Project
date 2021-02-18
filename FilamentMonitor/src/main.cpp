@@ -91,7 +91,8 @@ void setUpRTC () {
     }
 
     // set Alarm 1 to occur at 5 seconds after every minute
-    RTC.setAlarm(ALM1_MATCH_SECONDS, 5, 0, 0, 1);   //TODO Alarm at 15 after every hour
+    //*Set Below to desired sleep amounts
+    RTC.setAlarm(ALM1_MATCH_HOURS, 15, 0, 0, 1);    //Alarm at 15 after every hour
     RTC.setAlarm(ALM2_MATCH_HOURS, 45, 0, 0);       //Alarm at 45 after every hour
     // clear the alarm flag
     RTC.alarm(ALARM_1);
