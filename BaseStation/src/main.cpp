@@ -266,6 +266,8 @@ void setUpLoRa() {
       Serial.println("Starting LoRa failed!");
       while(1); // Don't proceed, loop forever
     }
+    //Set Sync Word
+    LoRa.setSyncWord(LORA_SYNC_WORD);
 
     //Setup Lora as a callback so we can be duplex
     LoRa.onReceive(onLoRaReceive);
