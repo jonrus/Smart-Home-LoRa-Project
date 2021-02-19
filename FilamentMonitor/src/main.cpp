@@ -122,10 +122,11 @@ void setUpBME() {
     //https://github.com/adafruit/Adafruit_BME280_Library/blob/master/examples/advancedsettings/advancedsettings.ino
     //http://adafruit.github.io/Adafruit_BME280_Library/html/class_adafruit___b_m_e280.html
     bme.setSampling(Adafruit_BME280::MODE_FORCED,
-                    Adafruit_BME280::SAMPLING_X2,   //Temperature
+                    Adafruit_BME280::SAMPLING_X4,   //Temperature
                     Adafruit_BME280::SAMPLING_NONE, //Pressure - Not used in this project
-                    Adafruit_BME280::SAMPLING_X2,   //Humidity
-                    Adafruit_BME280::FILTER_X2);
+                    Adafruit_BME280::SAMPLING_X16,   //Humidity
+                    Adafruit_BME280::FILTER_X16,
+                    Adafruit_BME280::STANDBY_MS_0_5);
 
 }
 void setUpPins() {
