@@ -35,6 +35,15 @@
 #define BATT_ADC_PIN 13
 #define BATT_RELAY_PIN 12
 
+//Battery Voltage Defines
+#define TurnRelayOnVolts 11.9
+#define TurnRelayOffVolts 12.4
+
+//Defines - General
+#define VOLT_CHECK_SECS 900//15 Minutes //How often to check the battery volts when relay is open
+#define RELAY_ON_SECS 7200//120 Minutes //How long relay will stay close once turned on
+#define STATUS_UPDATE_SEC 20  // How offten to send an update to base station in secs
+
 //Globals
 byte localAdr = ShedRelayAddress; // Easy way to refer to ourself
 LoRaData sendMsg;
@@ -42,10 +51,6 @@ LoRaData recvMsg;
 Ticker voltCheckRelayTicker;
 Ticker sendStatusUpdateTicker;
 Adafruit_BME280 bme;
-
-//Battery Voltage Defines
-#define TurnRelayOnVolts 11.9
-#define TurnRelayOffVolts 12.4
 ///////////////////////////
 // Functions - General
 ///////////////////////////
@@ -160,7 +165,7 @@ void checkBatteryVoltage() { //*Called by Ticker
         sendMsg.relayState = 0x00;
 
         voltCheckRelayTicker.detach(); //Unsure if I need to detach first but why not
-        voltCheckRelayTicker.attach(20, checkBatteryVoltage); //TODO Use 900 for 15 minutes
+        voltCheckRelayTicker.attach(VOLT_CHECK_SECS, checkBatteryVoltage);
 
         //Send message
         sendStatusMessage();
@@ -175,7 +180,7 @@ void checkBatteryVoltage() { //*Called by Ticker
 
             //Update ticker
             voltCheckRelayTicker.detach();
-            voltCheckRelayTicker.attach(10, checkBatteryVoltage); //TODO use 7200 for 120 minutes
+            voltCheckRelayTicker.attach(RELAY_ON_SECS, checkBatteryVoltage);
 
             //Send message
             sendStatusMessage();
@@ -213,10 +218,6 @@ void setUpLoRa() {
     LoRa.receive();
 }
 void setUpStructs() {
-    //Put blank/starting data in all the strucs
-    initStruct(recvMsg);
-    initStruct(sendMsg);
-
     //Unique settings Here
     sendMsg.destAdr = BaseStationAddress;
     sendMsg.senderAdr = localAdr;
@@ -246,8 +247,8 @@ void setup() {
     setUpBME();  //*This is blocking
 
     //Attach Tickers
-    voltCheckRelayTicker.attach(10, checkBatteryVoltage);  //TODO Use 900 for 15 minutes
-    sendStatusUpdateTicker.attach(30, sendStatusMessage); //TODO Use 300 for 5 minutes
+    voltCheckRelayTicker.attach(VOLT_CHECK_SECS, checkBatteryVoltage);
+    sendStatusUpdateTicker.attach(STATUS_UPDATE_SEC, sendStatusMessage);
 
 
     //Send a status update on first boot

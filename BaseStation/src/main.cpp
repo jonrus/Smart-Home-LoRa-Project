@@ -43,10 +43,11 @@
 #define TOUCH_IN_PIN 13
 #define SHED_LED_PIN 17
 #define FILAMENT_LED_PIN 23 //Also the built in LED but oh well - running out of pins
+#define BUILT_IN_LED 2
 
 //Defines
 #define OLED_ON_TIME 60  //Time in seconds before OLED goes to sleep
-
+#define FILAMENT_MON_LOW_BATTERY_VOLTS 3.2
 //Globals
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 RH_NRF24 nrf24(NRF_CE_PIN, NRF_CSN_PIN);  //CE = pin 12, CSN = 22
@@ -77,7 +78,7 @@ void updateLEDPins() {
         }
 
         //Filament Monitor LED
-        if (filamentMonData.batt < 3.2) {  //Change this to match your battery cutoff voltage
+        if (filamentMonData.batt < FILAMENT_MON_LOW_BATTERY_VOLTS) {  //Change this to match your battery cutoff voltage
             digitalWrite(FILAMENT_LED_PIN, HIGH);
         }
         else {
@@ -224,16 +225,13 @@ void checkTouchWakeScreenLoop() {
     static unsigned long last_interrupt_time = 0;
     unsigned long interrupt_time = millis();
     // If interrupts come faster than Xms, assume it's a bounce and ignore
-    // Using a long time just because it causes an OLED update.
-    if (interrupt_time - last_interrupt_time > 8000)
+    // Using a long time because the ESP version of Ticker lib does not support .active()
+    if (interrupt_time - last_interrupt_time > OLED_ON_TIME)
     {
         if (blankOLED) {  // Prevent from attaching when already attached
             blankOLED = false;
             needOLEDUpdate = true;  //Need or the screen wont update until the next message in
-            if (!sleepOLEDTicker.active()) {
-                //Only attach it it's not already
-                sleepOLEDTicker.attach(OLED_ON_TIME, sleepOLEDScreen);
-            }
+            sleepOLEDTicker.attach(OLED_ON_TIME, sleepOLEDScreen);
         }
     }
     last_interrupt_time = interrupt_time;
