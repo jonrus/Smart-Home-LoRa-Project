@@ -36,7 +36,7 @@
 #define BATT_RELAY_PIN 12
 
 //Battery Voltage Defines
-#define TurnRelayOnVolts 11.9
+#define TurnRelayOnVolts 11.5
 #define TurnRelayOffVolts 12.4
 
 //Defines - General
@@ -131,7 +131,7 @@ void splitNumOnDec(float inNum, byte &outWhole, byte &outDec) {
 }
 float readBatteryVoltage() {
     float adc = analogRead(BATT_ADC_PIN);
-    float volts = (adc * 3.52) / (4095.0);  //Custom tune the ref voltage value
+    float volts = (adc * 3.55) / (4095.0);  //Custom tune the ref voltage value
     volts = volts / 0.2;  //0.2 is the the result of  (R2/(R1+R2)) of our voltage divider
     return volts;
 }
