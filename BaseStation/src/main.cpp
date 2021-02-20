@@ -44,6 +44,9 @@
 #define SHED_LED_PIN 17
 #define FILAMENT_LED_PIN 23 //Also the built in LED but oh well - running out of pins
 
+//Defines
+#define OLED_ON_TIME 60  //Time in seconds before OLED goes to sleep
+
 //Globals
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 RH_NRF24 nrf24(NRF_CE_PIN, NRF_CSN_PIN);  //CE = pin 12, CSN = 22
@@ -55,7 +58,7 @@ Ticker sleepOLEDTicker;
 bool needOLEDUpdate = true;
 bool blankOLED = false;
 bool wakeUpOLED = false;
-const int touchThreshold = 70;
+const int touchThreshold = 70; //Lower number is MORE sensitive
 ///////////////////////////
 // Functions - General
 ///////////////////////////
@@ -157,7 +160,7 @@ void onLoRaReceive(int inPacket) {
     //Clear out any eariler message
     recvMsg.message = "";
 
-    //Work over remaining data
+    //Work over remaining data - read into string
     while (LoRa.available()) {
       recvMsg.message += (char)LoRa.read();
     }
@@ -211,6 +214,7 @@ void readNRF24Data() {
     }
 }
 void sleepOLEDScreen() {
+    //Ticker function should be kept short on ESP platforms
     blankOLED = true;
     needOLEDUpdate = true;
     sleepOLEDTicker.detach();
@@ -220,13 +224,16 @@ void checkTouchWakeScreenLoop() {
     static unsigned long last_interrupt_time = 0;
     unsigned long interrupt_time = millis();
     // If interrupts come faster than Xms, assume it's a bounce and ignore
-    //Using a long debound time because we don't want to reattach the same ticker over and over
-    if (interrupt_time - last_interrupt_time > 5000)
+    // Using a long time just because it causes an OLED update.
+    if (interrupt_time - last_interrupt_time > 8000)
     {
         if (blankOLED) {  // Prevent from attaching when already attached
             blankOLED = false;
             needOLEDUpdate = true;  //Need or the screen wont update until the next message in
-            sleepOLEDTicker.attach(5, sleepOLEDScreen);
+            if (!sleepOLEDTicker.active()) {
+                //Only attach it it's not already
+                sleepOLEDTicker.attach(OLED_ON_TIME, sleepOLEDScreen);
+            }
         }
     }
     last_interrupt_time = interrupt_time;
@@ -276,11 +283,6 @@ void setUpLoRa() {
     Serial.println("LoRa Initializing - OK!");
 }
 void setUpStructs() {
-    //Put blank/starting data in all the strucs so it looks okay on OLED
-    initStruct(recvMsg);
-    initStruct(sendMsg);
-    initFilamentMon_Struct(filamentMonData);
-
     //Unique settings Here
     sendMsg.destAdr = ShedRelayAddress;
     sendMsg.senderAdr = localAdr;
@@ -319,7 +321,7 @@ void setup() {
     updateOLED();
 
     //Attach Tickers
-    sleepOLEDTicker.attach(5, sleepOLEDScreen);
+    sleepOLEDTicker.attach(OLED_ON_TIME, sleepOLEDScreen);
 
     //Attach touch Interrupt
     touchAttachInterrupt(TOUCH_IN_PIN, touchWakeScreen, touchThreshold);
